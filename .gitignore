@@ -30,3 +30,6 @@ example/android/local.properties
 *.swp
 __pycache__/
 *.pyc
+
+# Generated Flutter state
+.flutter-plugins-dependencies

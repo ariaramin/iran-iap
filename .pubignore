@@ -4,6 +4,7 @@
 **/.pub/
 **/build/
 **/coverage/
+**/.flutter-plugins-dependencies
 doc/api/
 **/pubspec.lock
 **/pubspec_overrides.yaml

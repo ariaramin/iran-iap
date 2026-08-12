@@ -21,8 +21,8 @@ python3 -m compileall -q tool
 PASS — maintainer Python tooling compiles
 
 Repository/security hygiene scan
-PASS — no local user paths, private-key blocks, keystores, local.properties,
-build caches, logs, or provider Flutter dependencies detected
+PASS — no private-key blocks, keystores, build caches, or provider Flutter dependencies detected.
+(Note: Machine-specific local.properties and generated Flutter metadata were removed and are now git-ignored).
 ```
 
 The final ZIP is also integrity-tested and SHA-256 hashed after packaging.

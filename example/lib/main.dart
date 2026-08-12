@@ -125,7 +125,8 @@ class _ExampleAppState extends State<_ExampleApp> {
         return;
       }
       setState(() {
-        _status = '${error.code.name}: ${error.message}\n'
+        _status =
+            '${error.code.name}: ${error.message}\n'
             '${error.nativeExceptionType ?? ''}';
       });
     } on Exception catch (error) {
@@ -155,10 +156,7 @@ class _ExampleAppState extends State<_ExampleApp> {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: Colors.indigo,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
       home: Scaffold(
         appBar: AppBar(title: const Text('iran_iap example')),
         body: SafeArea(

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 const _stores = {'bazaar', 'myket'};
@@ -13,12 +14,6 @@ Future<void> main(List<String> args) async {
   final store = parsed.store;
   final remaining = parsed.remaining;
 
-  if (store == null || !_stores.contains(store)) {
-    stderr.writeln('Missing or invalid --store. Expected: bazaar | myket');
-    _usage();
-    exitCode = 64;
-    return;
-  }
   if (remaining.isEmpty) {
     stderr.writeln('Missing command.');
     _usage();
@@ -28,6 +23,19 @@ Future<void> main(List<String> args) async {
 
   final command = remaining.first;
   final commandArgs = remaining.sublist(1);
+
+  if (command == 'verify') {
+    exitCode = await _verify(commandArgs, store);
+    return;
+  }
+
+  if (store == null || !_stores.contains(store)) {
+    stderr.writeln('Missing or invalid --store. Expected: bazaar | myket');
+    _usage();
+    exitCode = 64;
+    return;
+  }
+
   final projectDirectory = _resolveProjectDirectory(
     explicitPath: parsed.projectDirectory,
     allowExplicitTarget: command != 'doctor',
@@ -50,7 +58,8 @@ Future<void> main(List<String> args) async {
   }
 
   if (command == 'doctor') {
-    exitCode = _doctor(projectDirectory, store);
+    final isJson = commandArgs.contains('--json');
+    exitCode = _doctor(projectDirectory, store, isJson: isJson);
     return;
   }
 
@@ -231,6 +240,7 @@ int _doctor(
   Directory projectDirectory,
   String store, {
   bool quietSuccess = false,
+  bool isJson = false,
 }) {
   final problems = <String>[];
   final warnings = <String>[];
@@ -284,6 +294,18 @@ int _doctor(
     }
   }
 
+  if (isJson) {
+    final out = {
+      'store': store,
+      'project': projectDirectory.path,
+      'problems': problems,
+      'warnings': warnings,
+      'status': problems.isEmpty ? 'pass' : 'fail',
+    };
+    stdout.writeln(jsonEncode(out));
+    return problems.isEmpty ? 0 : 1;
+  }
+
   if (!quietSuccess || problems.isNotEmpty || warnings.isNotEmpty) {
     stdout
       ..writeln('iran_iap doctor')
@@ -303,6 +325,36 @@ int _doctor(
   }
 
   return problems.isEmpty ? 0 : 1;
+}
+
+Future<int> _verify(List<String> args, String? store) async {
+  if (store == null || !_stores.contains(store)) {
+    stderr.writeln('Error: --store bazaar|myket is required for verify.');
+    return 64;
+  }
+  if (args.isEmpty) {
+    stderr.writeln('Error: artifact path (APK/AAB) required for verify.');
+    return 64;
+  }
+  final artifactPath = args.first;
+  final artifact = File(artifactPath);
+  if (!artifact.existsSync()) {
+    stderr.writeln('Error: artifact file not found: $artifactPath');
+    return 66;
+  }
+
+  // Reuse the Python scanner
+  final scriptPath = Platform.script.toFilePath();
+  final packageDir = Directory(scriptPath).parent.parent.path;
+  final pythonTool = '$packageDir/tool/verify_android_artifact.py';
+
+  final process = await Process.start('python3', [
+    pythonTool,
+    '--store',
+    store,
+    artifactPath,
+  ], mode: ProcessStartMode.inheritStdio);
+  return process.exitCode;
 }
 
 List<String> _readGradleFiles(Directory androidDirectory) {
@@ -339,17 +391,21 @@ Usage:
 
 Commands:
   doctor  Check host Android configuration for the selected store.
+          Options: --json
   run     Run the Flutter app with the selected store.
   build   Build the Flutter app (apk|appbundle) with the selected store.
+  verify  Verify that a built APK/AAB does not contain forbidden traces.
+          Requires: --store <bazaar|myket> <path-to-artifact>
 
 Options:
   --store <bazaar|myket>    (Required) The target app store.
   --project-dir <path>      Path to the Flutter project (default: current directory).
 
 Examples:
-  dart run iran_iap doctor --store bazaar
+  dart run iran_iap doctor --store bazaar --json
   dart run iran_iap run --store bazaar --debug
   dart run iran_iap build apk --store myket --release
+  dart run iran_iap verify --store bazaar build/app/outputs/flutter-apk/app-release.apk
 
 The CLI ensures that only the selected store's native SDK and logic are included
 in the build. It never modifies your pubspec.yaml.

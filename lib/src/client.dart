@@ -126,7 +126,8 @@ final class IranIap implements IranIapClient {
       throw IapException(
         code: IapErrorCode.configuration,
         store: store,
-        message: 'Dart selected ${store.name}, but the Android build '
+        message:
+            'Dart selected ${store.name}, but the Android build '
             'contains ${nativeStore ?? 'no'} billing implementation.',
       );
     }
@@ -157,13 +158,11 @@ final class IranIap implements IranIapClient {
     _validateIds(productIds);
 
     return _guard(() async {
-      final raw = await _invoke<List<Object?>>(
-        'queryProducts',
-        <String, Object?>{
-          'productIds': productIds.toList(growable: false),
-          'type': _productTypeWireName(type),
-        },
-      );
+      final raw =
+          await _invoke<List<Object?>>('queryProducts', <String, Object?>{
+            'productIds': productIds.toList(growable: false),
+            'type': _productTypeWireName(type),
+          });
       return (raw ?? const <Object?>[])
           .map(_decodeProduct)
           .toList(growable: false);
@@ -185,15 +184,13 @@ final class IranIap implements IranIapClient {
     }
 
     return _guard(() async {
-      final raw = await _invoke<Map<Object?, Object?>>(
-        'purchase',
-        <String, Object?>{
-          'productId': request.productId,
-          'type': _productTypeWireName(request.type),
-          'payload': request.payload,
-          'dynamicPriceToken': request.dynamicPriceToken,
-        },
-      );
+      final raw =
+          await _invoke<Map<Object?, Object?>>('purchase', <String, Object?>{
+            'productId': request.productId,
+            'type': _productTypeWireName(request.type),
+            'payload': request.payload,
+            'dynamicPriceToken': request.dynamicPriceToken,
+          });
       final map = _asStringMap(raw, 'purchase');
       return switch (map['status']) {
         'completed' => PurchaseCompleted(
@@ -244,19 +241,15 @@ final class IranIap implements IranIapClient {
             'Myket consumption requires rawReceipt and signature.',
           );
         }
-        return _invoke<void>(
-          'consume',
-          <String, Object?>{
-            'type': _productTypeWireName(purchase.type),
-            'rawReceipt': purchase.rawReceipt,
-            'signature': purchase.signature,
-          },
-        );
+        return _invoke<void>('consume', <String, Object?>{
+          'type': _productTypeWireName(purchase.type),
+          'rawReceipt': purchase.rawReceipt,
+          'signature': purchase.signature,
+        });
       }
-      return _invoke<void>(
-        'consume',
-        <String, Object?>{'token': purchase.token},
-      );
+      return _invoke<void>('consume', <String, Object?>{
+        'token': purchase.token,
+      });
     });
   }
 
@@ -296,9 +289,7 @@ final class IranIap implements IranIapClient {
       'rsaPublicKey': config.storePublicKey,
       'supportSubscriptions': config.enableSubscriptions,
     },
-    IapStore.myket => <String, Object?>{
-      'publicKey': config.storePublicKey,
-    },
+    IapStore.myket => <String, Object?>{'publicKey': config.storePublicKey},
   };
 
   Future<T?> _invoke<T>(String method, [Object? arguments]) async {

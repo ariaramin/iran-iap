@@ -23,7 +23,7 @@
 
 ## Publication
 
-- [ ] Confirm `https://github.com/ariaramin/iran_iap` is the intended public repository; change pubspec URLs if needed.
+- [ ] Confirm `https://github.com/ariaramin/iran-iap` is the intended public repository; change pubspec URLs if needed.
 - [ ] Confirm the `iran_iap` name is still available on pub.dev immediately before the first publish.
 - [ ] Confirm current Myket Billing Client vendor/license terms for the intended public integration.
 - [ ] Run `dart format .`.

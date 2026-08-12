@@ -1,0 +1,49 @@
+name: Feature Request
+description: Suggest an idea or improvement for iran_iap.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature! Please provide as much context as possible.
+        **Do not paste secrets, tokens, receipts, or purchase evidence here.**
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Use Case
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-behavior
+    attributes:
+      label: Proposed Behavior
+      description: How should the feature work?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: target-store
+    attributes:
+      label: Target Store(s)
+      options:
+        - Cafe Bazaar
+        - Myket
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other ways you've tried to achieve this?
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Willingness to contribute
+      options:
+        - label: I am willing to submit a pull request for this feature.

@@ -18,9 +18,8 @@ void main() {
       contains(_storeName),
       reason: 'Run tests with --dart-define=IRAN_IAP_STORE=bazaar|myket.',
     );
-    messenger = TestDefaultBinaryMessengerBinding
-        .instance
-        .defaultBinaryMessenger;
+    messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   });
 
   tearDown(() {
@@ -52,10 +51,7 @@ void main() {
     expect(iap.isInitialized, isTrue);
     expect(iap.capabilities.supportsSubscriptions, isTrue);
     expect(iap.capabilities.supportsConsumption, isTrue);
-    expect(
-      iap.capabilities.supportsDynamicPricing,
-      _storeName == 'bazaar',
-    );
+    expect(iap.capabilities.supportsDynamicPricing, _storeName == 'bazaar');
   });
 
   test('initialization can be retried after a native failure', () async {
@@ -100,15 +96,18 @@ void main() {
   });
 
   test('native disconnect invalidates local initialized state', () async {
-    _mockReady(messenger, onMethod: (call) async {
-      if (call.method == 'queryPurchases') {
-        throw PlatformException(
-          code: 'notInitialized',
-          message: 'Billing connection was lost',
-        );
-      }
-      return null;
-    });
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'queryPurchases') {
+          throw PlatformException(
+            code: 'notInitialized',
+            message: 'Billing connection was lost',
+          );
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();
@@ -129,12 +128,15 @@ void main() {
   });
 
   test('purchase cancellation is a typed outcome', () async {
-    _mockReady(messenger, onMethod: (call) async {
-      if (call.method == 'purchase') {
-        return <String, Object?>{'status': 'cancelled'};
-      }
-      return null;
-    });
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'purchase') {
+          return <String, Object?>{'status': 'cancelled'};
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();
@@ -200,12 +202,15 @@ void main() {
 
   test('overlapping billing operations are rejected', () async {
     final firstQuery = Completer<List<Object?>>();
-    _mockReady(messenger, onMethod: (call) async {
-      if (call.method == 'queryProducts') {
-        return firstQuery.future;
-      }
-      return null;
-    });
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'queryProducts') {
+          return firstQuery.future;
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();
@@ -233,8 +238,9 @@ void main() {
     final iap = _client();
     await iap.initialize();
 
-    const otherStore =
-        _storeName == 'bazaar' ? IapStore.myket : IapStore.bazaar;
+    const otherStore = _storeName == 'bazaar'
+        ? IapStore.myket
+        : IapStore.bazaar;
     final purchase = IapPurchase(
       store: otherStore,
       productId: 'coins',
@@ -247,41 +253,46 @@ void main() {
     await expectLater(iap.consume(purchase), throwsArgumentError);
   });
 
-  test('dynamic price token is rejected by Myket before native purchase',
-      () async {
-    if (_storeName != 'myket') {
-      return;
-    }
-    _mockReady(messenger);
-    final iap = _client();
-    await iap.initialize();
+  test(
+    'dynamic price token is rejected by Myket before native purchase',
+    () async {
+      if (_storeName != 'myket') {
+        return;
+      }
+      _mockReady(messenger);
+      final iap = _client();
+      await iap.initialize();
 
-    await expectLater(
-      iap.purchase(
-        const IapPurchaseRequest(
-          productId: 'coins',
-          type: IapProductType.inApp,
-          dynamicPriceToken: 'dynamic-token',
+      await expectLater(
+        iap.purchase(
+          const IapPurchaseRequest(
+            productId: 'coins',
+            type: IapProductType.inApp,
+            dynamicPriceToken: 'dynamic-token',
+          ),
         ),
-      ),
-      throwsA(
-        isA<IapException>().having(
-          (error) => error.code,
-          'code',
-          IapErrorCode.featureUnavailable,
+        throwsA(
+          isA<IapException>().having(
+            (error) => error.code,
+            'code',
+            IapErrorCode.featureUnavailable,
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 
   test('dispose is idempotent and prevents reuse', () async {
     var disposeCount = 0;
-    _mockReady(messenger, onMethod: (call) async {
-      if (call.method == 'dispose') {
-        disposeCount++;
-      }
-      return null;
-    });
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'dispose') {
+          disposeCount++;
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();

@@ -1,4 +1,4 @@
-import 'package:iran_iap/src/store.dart';
+import 'package:iran_iap/src/core/store.dart';
 import 'package:meta/meta.dart';
 
 /// Input for a purchase or subscription flow.
@@ -18,6 +18,21 @@ final class IapPurchaseRequest {
     this.payload,
     this.dynamicPriceToken,
   });
+
+  /// Validates the request fields.
+  void validate() {
+    if (productId.trim().isEmpty) {
+      throw ArgumentError.value(productId, 'productId', 'Must not be empty.');
+    }
+    final token = dynamicPriceToken;
+    if (token != null && token.trim().isEmpty) {
+      throw ArgumentError.value(
+        token,
+        'dynamicPriceToken',
+        'Must not be empty when provided.',
+      );
+    }
+  }
 
   /// Product/SKU identifier configured in the target store console.
   final String productId;
@@ -58,6 +73,33 @@ final class IapPurchase {
     }
     if (token.trim().isEmpty) {
       throw ArgumentError.value(token, 'token', 'Must not be empty.');
+    }
+  }
+
+  /// Decodes purchase evidence from a native map.
+  factory IapPurchase.fromMap({
+    required Map<String, Object?> map,
+    required IapProductType type,
+    required IapStore store,
+  }) {
+    try {
+      return IapPurchase(
+        store: store,
+        productId: map['productId']! as String,
+        type: type,
+        token: map['token']! as String,
+        orderId: map['orderId'] as String?,
+        payload: map['payload'] as String?,
+        packageName: map['packageName'] as String?,
+        state: IapPurchaseState.fromWire(map['state']),
+        purchaseTime: DateTime.fromMillisecondsSinceEpoch(
+          map['purchaseTime']! as int,
+        ),
+        rawReceipt: map['rawReceipt'] as String?,
+        signature: map['signature'] as String?,
+      );
+    } on Object catch (error) {
+      throw FormatException('Malformed purchase payload: $error');
     }
   }
 

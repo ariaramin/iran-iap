@@ -1,4 +1,4 @@
-import 'package:iran_iap/src/store.dart';
+import 'package:iran_iap/src/core/store.dart';
 import 'package:meta/meta.dart';
 
 /// Product metadata returned by the selected store.
@@ -14,6 +14,21 @@ final class IapProduct {
   }) {
     if (id.trim().isEmpty) {
       throw ArgumentError.value(id, 'id', 'Must not be empty.');
+    }
+  }
+
+  /// Decodes a product from a native map.
+  factory IapProduct.fromMap(Map<String, Object?> map) {
+    try {
+      return IapProduct(
+        id: map['id']! as String,
+        type: IapProductType.fromWire(map['type']! as String),
+        title: map['title'] as String? ?? '',
+        description: map['description'] as String? ?? '',
+        price: map['price'] as String? ?? '',
+      );
+    } on Object catch (error) {
+      throw FormatException('Malformed product payload: $error');
     }
   }
 

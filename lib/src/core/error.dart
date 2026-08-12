@@ -1,4 +1,5 @@
-import 'package:iran_iap/src/store.dart';
+import 'package:flutter/services.dart';
+import 'package:iran_iap/src/core/store.dart';
 import 'package:meta/meta.dart';
 
 /// Stable error categories exposed by `iran_iap`.
@@ -66,7 +67,17 @@ enum IapErrorCode {
   platform,
 
   /// The package received an error code it does not recognize yet.
-  unknown,
+  unknown;
+
+  /// Parses a string code into a [IapErrorCode].
+  static IapErrorCode fromCode(String value) {
+    for (final code in IapErrorCode.values) {
+      if (code.name == value) {
+        return code;
+      }
+    }
+    return IapErrorCode.unknown;
+  }
 }
 
 /// A normalized billing failure with optional native diagnostics.
@@ -82,6 +93,23 @@ final class IapException implements Exception {
     this.nativeExceptionType,
     Map<String, Object?> details = const <String, Object?>{},
   }) : details = Map<String, Object?>.unmodifiable(details);
+
+  /// Creates an [IapException] from a [PlatformException].
+  factory IapException.fromPlatform({
+    required PlatformException exception,
+    required IapStore store,
+  }) {
+    final details = _decodePlatformDetails(exception.details);
+    return IapException(
+      code: IapErrorCode.fromCode(exception.code),
+      store: store,
+      message: exception.message ?? '${store.name} billing operation failed.',
+      nativeCode: details['nativeCode'],
+      nativeMessage: details['nativeMessage']?.toString(),
+      nativeExceptionType: details['nativeExceptionType']?.toString(),
+      details: details,
+    );
+  }
 
   /// Stable package-level error category.
   final IapErrorCode code;
@@ -113,4 +141,15 @@ final class IapException implements Exception {
       'code: $code, store: $store, message: $message, '
       'nativeCode: $nativeCode, nativeMessage: $nativeMessage, '
       'nativeExceptionType: $nativeExceptionType)';
+}
+
+Map<String, Object?> _decodePlatformDetails(Object? value) {
+  if (value is! Map) {
+    return const <String, Object?>{};
+  }
+  try {
+    return Map<String, Object?>.from(value);
+  } on Object {
+    return <String, Object?>{'rawDetails': value.toString()};
+  }
 }

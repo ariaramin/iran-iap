@@ -1,0 +1,32 @@
+
+# Dart / Flutter
+.dart_tool/
+.packages
+.pub/
+build/
+coverage/
+doc/api/
+pubspec.lock
+pubspec_overrides.yaml
+
+# Android
+android/.gradle/
+android/local.properties
+example/android/.gradle/
+example/android/local.properties
+**/key.properties
+*.jks
+*.keystore
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Logs / temp
+*.log
+*.tmp
+*.swp
+__pycache__/
+*.pyc

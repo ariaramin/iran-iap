@@ -1,0 +1,34 @@
+name: Bug report
+description: Report reproducible iran_iap behavior
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: dropdown
+    id: store
+    attributes:
+      label: Store
+      options:
+        - Cafe Bazaar
+        - Myket
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: iran_iap version
+      placeholder: 0.3.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include expected behavior and a minimal reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove purchase tokens, receipts, signatures, keys, and personal data before posting.
+      render: shell

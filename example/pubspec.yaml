@@ -1,0 +1,15 @@
+name: iran_iap_example
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  iran_iap:
+    path: ../
+
+flutter:
+  uses-material-design: true

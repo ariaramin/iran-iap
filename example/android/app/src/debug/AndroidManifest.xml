@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required by Flutter tooling in debug mode for the Dart VM service,
+         hot reload, breakpoints, and debugger communication. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>

@@ -1,0 +1,125 @@
+group = 'dev.iraniap'
+version = '0.3.0'
+
+
+apply plugin: 'com.android.library'
+
+// Store selection precedence:
+// 1. Explicit Gradle project property (`iranIapStore`) used by iran_iap CLI/CI.
+// 2. Flutter's standard `--dart-define=IRAN_IAP_STORE=...` value. Flutter 3.44
+//    passes Dart defines to Gradle as a comma-separated list of Base64 entries
+//    in the `dart-defines` project property.
+// 3. `stub`, which keeps dependency resolution safe but fails at runtime with a
+//    configuration error instead of accidentally compiling a store SDK.
+def decodeFlutterDartDefines = { encodedDefines ->
+    if (encodedDefines == null || encodedDefines.toString().trim().isEmpty()) {
+        return [:]
+    }
+
+    def values = [:]
+    encodedDefines.toString().split(',').each { encodedEntry ->
+        if (encodedEntry == null || encodedEntry.isEmpty()) return
+        try {
+            def bytes = java.util.Base64.getDecoder().decode(encodedEntry)
+            def decoded = new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+            def separator = decoded.indexOf('=')
+            if (separator > 0) {
+                values[decoded.substring(0, separator)] = decoded.substring(separator + 1)
+            }
+        } catch (IllegalArgumentException error) {
+            throw new GradleException(
+                "iran_iap could not decode Flutter's dart-defines entry. " +
+                "Use --dart-define=IRAN_IAP_STORE=bazaar|myket.",
+                error,
+            )
+        }
+    }
+    return values
+}
+
+def explicitStore = providers.gradleProperty('iranIapStore').orNull?.trim()?.toLowerCase()
+def encodedDartDefines = providers.gradleProperty('dart-defines').orNull
+if (encodedDartDefines == null) {
+    encodedDartDefines = rootProject.findProperty('dart-defines')?.toString()
+}
+def flutterDartDefines = decodeFlutterDartDefines(encodedDartDefines)
+def dartDefinedStore = flutterDartDefines['IRAN_IAP_STORE']?.trim()?.toLowerCase()
+
+if (explicitStore != null && dartDefinedStore != null && explicitStore != dartDefinedStore) {
+    throw new GradleException(
+        "iran_iap store mismatch: Gradle selected '${explicitStore}' but " +
+        "IRAN_IAP_STORE is '${dartDefinedStore}'. Use one matching store value."
+    )
+}
+
+def selectedStore = explicitStore ?: dartDefinedStore ?: 'stub'
+def supportedStores = ['bazaar', 'myket', 'stub']
+if (!supportedStores.contains(selectedStore)) {
+    throw new GradleException(
+        "Unsupported iran_iap store '${selectedStore}'. Expected bazaar or myket."
+    )
+}
+
+android {
+    namespace 'dev.iraniap'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+    }
+
+    // Flutter validates pluginClass before Gradle evaluation, so the stable entry
+    // point must physically live under android/src/main/kotlin/dev/iraniap.
+    //
+    // Flutter 3.44 can still run host projects with legacy KGP compatibility, while
+    // AGP 9+ supports built-in Kotlin. Android's built-in Kotlin migration requires
+    // additional Kotlin directories to be registered as Kotlin sources rather than
+    // Java sources. Select the supported source-set API without ever exposing the
+    // unselected store directory to the compiler.
+    def builtInKotlinProperty = providers.gradleProperty('android.builtInKotlin').orNull
+    def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0] as int
+    def usesBuiltInKotlin = builtInKotlinProperty != null
+        ? builtInKotlinProperty.toBoolean()
+        : agpMajor >= 9
+
+    sourceSets {
+        main {
+            def selectedKotlinSources = [
+                'src/main/kotlin',
+                "src/${selectedStore}/kotlin",
+            ]
+
+            if (usesBuiltInKotlin) {
+                kotlin.srcDirs = selectedKotlinSources
+            } else {
+                // Legacy KGP treats Android's Java source directories as mixed
+                // Java/Kotlin roots. This is the compatibility path used by Flutter
+                // hosts that explicitly opt out of AGP built-in Kotlin.
+                java.srcDirs = selectedKotlinSources
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    if (selectedStore == 'bazaar') {
+        implementation 'com.github.cafebazaar.Poolakey:poolakey:2.2.0'
+    } else if (selectedStore == 'myket') {
+        implementation 'com.github.myketstore:myket-billing-client:1.19'
+    }
+}
+
+// Myket's AAR uses manifest placeholders supplied by the host application.
+// iran_iap intentionally does not mutate the consuming app's Gradle model.
+// See README.md for the one-time defaultConfig setup.

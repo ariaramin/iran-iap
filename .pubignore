@@ -1,0 +1,35 @@
+# Generated Dart / Flutter state
+**/.dart_tool/
+**/.packages
+**/.pub/
+**/build/
+**/coverage/
+doc/api/
+**/pubspec.lock
+**/pubspec_overrides.yaml
+
+# Android local/generated state
+**/.gradle/
+**/local.properties
+**/key.properties
+**/*.jks
+**/*.keystore
+
+# IDE / OS
+**/.idea/
+**/.vscode/
+**/*.iml
+**/.DS_Store
+
+# Logs / temporary files
+**/*.log
+**/*.tmp
+**/*.swp
+**/__pycache__/
+**/*.pyc
+
+# Maintainer-only repository automation and release evidence
+.github/
+tool/
+docs/
+VALIDATION_REPORT.md

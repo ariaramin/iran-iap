@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required by Flutter tooling in profile mode for VM service communication. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>

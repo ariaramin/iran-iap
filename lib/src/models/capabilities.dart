@@ -10,6 +10,15 @@ final class IapCapabilities {
     this.supportsDynamicPricing = false,
   });
 
+  /// Decodes capabilities from a native map.
+  factory IapCapabilities.fromMap(Map<String, Object?> map) {
+    return IapCapabilities(
+      supportsSubscriptions: map['supportsSubscriptions'] as bool? ?? false,
+      supportsConsumption: map['supportsConsumption'] as bool? ?? false,
+      supportsDynamicPricing: map['supportsDynamicPricing'] as bool? ?? false,
+    );
+  }
+
   /// Whether subscription APIs are available for this configuration.
   final bool supportsSubscriptions;
 

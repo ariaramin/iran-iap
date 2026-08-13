@@ -1,32 +1,59 @@
-
 # Dart / Flutter
 .dart_tool/
 .packages
 .pub/
+.pub-cache/
 build/
 coverage/
 doc/api/
 pubspec.lock
 pubspec_overrides.yaml
+.flutter-plugins
+.flutter-plugins-dependencies
+**/.plugin_symlinks/
+**/ephemeral/
 
 # Android
-android/.gradle/
-android/local.properties
-example/android/.gradle/
-example/android/local.properties
+**/.gradle/
+**/.kotlin/
+**/.cxx/
+**/.externalNativeBuild/
+**/captures/
+**/local.properties
 **/key.properties
 *.jks
 *.keystore
+*.apk
+*.aab
+*.aar
+
+# Python tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
 
 # IDE / OS
 .idea/
 *.iml
 .vscode/
+.fleet/
 .DS_Store
+Thumbs.db
 
-# Logs / temp
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Logs / temporary files
 *.log
 *.tmp
 *.swp
-__pycache__/
-*.pyc
+*.bak
+*.orig

@@ -23,9 +23,9 @@ FORBIDDEN: dict[str, tuple[bytes, ...]] = {
         b"dev/iraniap/myket",
         b"myket-billing-client",
     ),
+    # Myket Billing Client 1.19 itself contains Bazaar service identifiers.
+    # Poolakey package/artifact markers are the reliable cross-SDK boundary.
     "myket": (
-        b"com.farsitel.bazaar",
-        b"com/farsitel/bazaar",
         b"ir.cafebazaar.poolakey",
         b"ir/cafebazaar/poolakey",
         b"dev.iraniap.bazaar",

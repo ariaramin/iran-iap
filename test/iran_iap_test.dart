@@ -10,17 +10,20 @@ const _channel = MethodChannel('dev.iraniap/iran_iap');
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  if (!const {'bazaar', 'myket'}.contains(_storeName)) {
+    test(
+      'store-specific suite requires IRAN_IAP_STORE',
+      () {},
+      skip: 'Run with --dart-define=IRAN_IAP_STORE=bazaar|myket.',
+    );
+    return;
+  }
+
   late TestDefaultBinaryMessenger messenger;
 
   setUp(() {
-    expect(
-      {'bazaar', 'myket'},
-      contains(_storeName),
-      reason: 'Run tests with --dart-define=IRAN_IAP_STORE=bazaar|myket.',
-    );
-    messenger = TestDefaultBinaryMessengerBinding
-        .instance
-        .defaultBinaryMessenger;
+    messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   });
 
   tearDown(() {
@@ -52,10 +55,7 @@ void main() {
     expect(iap.isInitialized, isTrue);
     expect(iap.capabilities.supportsSubscriptions, isTrue);
     expect(iap.capabilities.supportsConsumption, isTrue);
-    expect(
-      iap.capabilities.supportsDynamicPricing,
-      _storeName == 'bazaar',
-    );
+    expect(iap.capabilities.supportsDynamicPricing, _storeName == 'bazaar');
   });
 
   test('initialization can be retried after a native failure', () async {
@@ -100,15 +100,23 @@ void main() {
   });
 
   test('native disconnect invalidates local initialized state', () async {
-    _mockReady(messenger, onMethod: (call) async {
-      if (call.method == 'queryPurchases') {
-        throw PlatformException(
-          code: 'notInitialized',
-          message: 'Billing connection was lost',
-        );
-      }
-      return null;
-    });
+    var initializeCount = 0;
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'initialize') {
+          initializeCount++;
+          return _capabilities();
+        }
+        if (call.method == 'queryPurchases') {
+          throw PlatformException(
+            code: 'notInitialized',
+            message: 'Billing connection was lost',
+          );
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();
@@ -126,15 +134,21 @@ void main() {
     );
 
     expect(iap.isInitialized, isFalse);
+    await iap.initialize();
+    expect(initializeCount, 2);
+    expect(iap.isInitialized, isTrue);
   });
 
   test('purchase cancellation is a typed outcome', () async {
-    _mockReady(messenger, onMethod: (call) async {
-      if (call.method == 'purchase') {
-        return <String, Object?>{'status': 'cancelled'};
-      }
-      return null;
-    });
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'purchase') {
+          return <String, Object?>{'status': 'cancelled'};
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();
@@ -198,14 +212,75 @@ void main() {
     );
   });
 
-  test('overlapping billing operations are rejected', () async {
-    final firstQuery = Completer<List<Object?>>();
-    _mockReady(messenger, onMethod: (call) async {
+  test('unsupported subscription query fails before native query', () async {
+    var queryCount = 0;
+    messenger.setMockMethodCallHandler(_channel, (call) async {
+      if (call.method == 'selectedStore') {
+        return _storeName;
+      }
+      if (call.method == 'initialize') {
+        return _capabilities(subscriptions: false);
+      }
       if (call.method == 'queryProducts') {
-        return firstQuery.future;
+        queryCount++;
       }
       return null;
     });
+
+    final iap = _client();
+    await iap.initialize();
+
+    await expectLater(
+      iap.queryProducts({'premium'}, type: IapProductType.subscription),
+      throwsA(
+        isA<IapException>().having(
+          (error) => error.code,
+          'code',
+          IapErrorCode.subscriptionUnavailable,
+        ),
+      ),
+    );
+    expect(queryCount, 0);
+  });
+
+  test('malformed native product becomes invalidResponse', () async {
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'queryProducts') {
+          return <Object?>[
+            <String, Object?>{'id': 42},
+          ];
+        }
+        return null;
+      },
+    );
+    final iap = _client();
+    await iap.initialize();
+
+    await expectLater(
+      iap.queryProducts({'premium'}, type: IapProductType.inApp),
+      throwsA(
+        isA<IapException>().having(
+          (error) => error.code,
+          'code',
+          IapErrorCode.invalidResponse,
+        ),
+      ),
+    );
+  });
+
+  test('overlapping billing operations are rejected', () async {
+    final firstQuery = Completer<List<Object?>>();
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'queryProducts') {
+          return firstQuery.future;
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();
@@ -233,8 +308,9 @@ void main() {
     final iap = _client();
     await iap.initialize();
 
-    const otherStore =
-        _storeName == 'bazaar' ? IapStore.myket : IapStore.bazaar;
+    const otherStore = _storeName == 'bazaar'
+        ? IapStore.myket
+        : IapStore.bazaar;
     final purchase = IapPurchase(
       store: otherStore,
       productId: 'coins',
@@ -247,41 +323,46 @@ void main() {
     await expectLater(iap.consume(purchase), throwsArgumentError);
   });
 
-  test('dynamic price token is rejected by Myket before native purchase',
-      () async {
-    if (_storeName != 'myket') {
-      return;
-    }
-    _mockReady(messenger);
-    final iap = _client();
-    await iap.initialize();
+  test(
+    'dynamic price token is rejected by Myket before native purchase',
+    () async {
+      if (_storeName != 'myket') {
+        return;
+      }
+      _mockReady(messenger);
+      final iap = _client();
+      await iap.initialize();
 
-    await expectLater(
-      iap.purchase(
-        const IapPurchaseRequest(
-          productId: 'coins',
-          type: IapProductType.inApp,
-          dynamicPriceToken: 'dynamic-token',
+      await expectLater(
+        iap.purchase(
+          const IapPurchaseRequest(
+            productId: 'coins',
+            type: IapProductType.inApp,
+            dynamicPriceToken: 'dynamic-token',
+          ),
         ),
-      ),
-      throwsA(
-        isA<IapException>().having(
-          (error) => error.code,
-          'code',
-          IapErrorCode.featureUnavailable,
+        throwsA(
+          isA<IapException>().having(
+            (error) => error.code,
+            'code',
+            IapErrorCode.featureUnavailable,
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 
   test('dispose is idempotent and prevents reuse', () async {
     var disposeCount = 0;
-    _mockReady(messenger, onMethod: (call) async {
-      if (call.method == 'dispose') {
-        disposeCount++;
-      }
-      return null;
-    });
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'dispose') {
+          disposeCount++;
+        }
+        return null;
+      },
+    );
 
     final iap = _client();
     await iap.initialize();
@@ -315,6 +396,10 @@ void main() {
 
     await expectLater(iap.initialize(), throwsArgumentError);
   });
+
+  test('legacy numeric refunded state is normalized', () {
+    expect(IapPurchaseState.fromWire(2), IapPurchaseState.refunded);
+  });
 }
 
 IranIap _client() {
@@ -334,13 +419,20 @@ void _mockReady(
     if (call.method == 'selectedStore') {
       return _storeName;
     }
-    if (call.method == 'initialize') {
-      return <String, Object?>{
-        'supportsSubscriptions': true,
-        'supportsConsumption': true,
-        'supportsDynamicPricing': _storeName == 'bazaar',
-      };
+    final customResponse = await onMethod?.call(call);
+    if (customResponse != null) {
+      return customResponse;
     }
-    return onMethod?.call(call);
+    if (call.method == 'initialize') {
+      return _capabilities();
+    }
+    return null;
   });
 }
+
+Map<String, Object?> _capabilities({bool subscriptions = true}) =>
+    <String, Object?>{
+      'supportsSubscriptions': subscriptions,
+      'supportsConsumption': true,
+      'supportsDynamicPricing': _storeName == 'bazaar',
+    };

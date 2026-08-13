@@ -1,4 +1,4 @@
-import 'package:iran_iap/src/purchase.dart';
+import 'package:iran_iap/src/models/purchase.dart';
 
 /// Result of a purchase flow.
 ///

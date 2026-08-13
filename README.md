@@ -1,45 +1,58 @@
+![iran_iap — Flutter in-app purchases for Cafe Bazaar and Myket](thumbnail.png)
+
 # iran_iap
 
-A small Flutter plugin for in-app purchases on **Cafe Bazaar** and **Myket** with one stable Dart dependency and build-time native SDK isolation.
+[![CI](https://github.com/ariaramin/iran-iap/actions/workflows/ci.yml/badge.svg)](https://github.com/ariaramin/iran-iap/actions/workflows/ci.yml)
+[![pub package](https://img.shields.io/pub/v/iran_iap.svg)](https://pub.dev/packages/iran_iap)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-The main goal is simple: keep the same `pubspec.yaml`, switch the target store at build time, and avoid shipping the other store's billing SDK in that APK/AAB.
+Build-time isolated in-app purchases for **Cafe Bazaar** and **Myket**. Use one
+Dart API while shipping only the native billing SDK selected for each Android
+artifact.
+
+## Why iran_iap?
+
+Multi-store wrappers commonly place every provider SDK in every APK or AAB.
+`iran_iap` selects the provider at build time instead:
+
+```mermaid
+flowchart LR
+    App["Flutter app"] --> API["iran_iap API"]
+    API --> Store{"Build selection"}
+    Store -->|bazaar| Bazaar["Poolakey SDK"]
+    Store -->|myket| Myket["Myket Billing SDK"]
+```
+
+The unselected billing SDK and its adapter are not compiled into the artifact.
+The repository includes an artifact scanner to enforce this boundary.
 
 ## Features
 
-- One Flutter dependency for Bazaar and Myket.
-- Build-time store selection; no runtime `if` that bundles both native SDKs.
-- In-app products and subscriptions.
-- Product queries, owned-purchase queries, purchase flows, and consumption.
-- User cancellation as a typed result instead of an exception.
-- Stable Dart error taxonomy while preserving native diagnostics.
-- Cafe Bazaar dynamic-price token support.
-- Store capabilities exposed after initialization.
-- Small dependency footprint: only the Flutter SDK on the Dart side.
-- A CLI for store-aware `run` and `build` commands without editing `pubspec.yaml`.
+- One store-agnostic API for products, purchases, subscriptions, and consumption.
+- Build-time Cafe Bazaar/Myket source-set and dependency isolation.
+- Typed purchase cancellation through `PurchaseCancelled`.
+- Stable `IapErrorCode` values with optional native diagnostics.
+- Idempotent initialization and disposal.
+- Runtime capability reporting.
+- CLI commands for host checks, store-aware runs/builds, and artifact verification.
 
-## Supported stores and platforms
+## Platform support
 
-| Platform / Store | Support |
-| --- | --- |
-| Android + Cafe Bazaar | ✅ |
-| Android + Myket | ✅ |
-| iOS | ❌ |
-| Web | ❌ |
-| macOS | ❌ |
-| Windows | ❌ |
-| Linux | ❌ |
+| Platform | Cafe Bazaar | Myket |
+| --- | --- | --- |
+| Android | Supported | Supported |
+| iOS, macOS, Linux, Windows, web | Not supported | Not supported |
 
-`iran_iap` is intentionally Android-only because Bazaar and Myket billing are Android store services.
-
-## Requirements
+Requirements:
 
 - Flutter `>=3.44.0`
 - Dart `>=3.12.0 <4.0.0`
 - Android `minSdk 24`
-- Java 17-compatible Android toolchain
-- Cafe Bazaar or Myket installed on the test device for real billing flows
+- Java 17 or newer
 
 ## Installation
+
+Add the package:
 
 ```yaml
 dependencies:
@@ -52,15 +65,12 @@ Then run:
 flutter pub get
 ```
 
-You do **not** add Poolakey, `myket_iap`, or a second Flutter billing package to your app's `pubspec.yaml`.
+## Android setup
 
-## Quick start
+### 1. Add JitPack
 
-### 1. One-time Android repository setup
-
-Both native store SDKs are distributed through JitPack. Add JitPack once to the Android repositories used by your application.
-
-For the common Flutter Gradle layout, add this to `android/build.gradle.kts`:
+Both native billing SDKs are resolved from JitPack. Add the repository once in
+the host project's `android/build.gradle.kts`:
 
 ```kotlin
 allprojects {
@@ -78,15 +88,13 @@ allprojects {
 }
 ```
 
-If your project centralizes repositories in `android/settings.gradle.kts`, put the same JitPack repository inside `dependencyResolutionManagement.repositories` instead.
+Use the equivalent `maven { url 'https://jitpack.io' }` syntax in Groovy
+projects.
 
-The repository declaration does not bundle either SDK. The selected build decides which native dependency is present.
+### 2. Add Myket manifest placeholders
 
-### 2. Keep Myket manifest placeholders configured once
-
-Myket Billing Client uses these host-app placeholders. They can stay in the app configuration for every build; they are only consumed when the Myket AAR is selected.
-
-In `android/app/build.gradle.kts`:
+Myket builds require these values in
+`android/app/build.gradle.kts`:
 
 ```kotlin
 android {
@@ -94,98 +102,104 @@ android {
         manifestPlaceholders["marketApplicationId"] = "ir.mservices.market"
         manifestPlaceholders["marketBindAddress"] =
             "ir.mservices.market.InAppBillingService.BIND"
-        manifestPlaceholders["marketPermission"] = "ir.mservices.market.BILLING"
+        manifestPlaceholders["marketPermission"] =
+            "ir.mservices.market.BILLING"
     }
 }
 ```
 
-### 3. Use a Bazaar-compatible Activity host
+It is safe to keep the placeholders in every build; they are inert when the
+Myket SDK is not selected.
 
-Poolakey's current purchase flow uses Android's Activity Result API. The easiest Flutter host is `FlutterFragmentActivity`:
+### 3. Use a compatible host activity
+
+Cafe Bazaar purchase flows use Android's Activity Result API. Make the host
+activity extend `FlutterFragmentActivity`:
 
 ```kotlin
+package com.example.app
+
 import io.flutter.embedding.android.FlutterFragmentActivity
 
 class MainActivity : FlutterFragmentActivity()
 ```
 
-This setup can remain unchanged for Myket builds as well.
+Check the host configuration at any time:
 
-### 4. Create the client
-
-```dart
-import 'package:iran_iap/iran_iap.dart';
-
-final iap = IranIap(
-  config: const IranIapConfig(
-    // Required for Myket. For Bazaar, only required for local verification.
-    storePublicKey: myStorePublicKey,
-  ),
-);
-
-await iap.initialize();
+```bash
+dart run iran_iap doctor --store bazaar
+dart run iran_iap doctor --store myket
 ```
 
-For a Bazaar build using backend verification, the config can be as small as:
+## Select a store at build time
+
+The bundled CLI supplies both the Dart define and matching Gradle property:
+
+```bash
+dart run iran_iap run --store bazaar
+dart run iran_iap build apk --store bazaar -- --release
+dart run iran_iap build appbundle --store myket -- --release
+```
+
+Place Flutter-specific options after `--`; options before it belong to the
+`iran_iap` CLI.
+
+The CLI returns `0` on success, `64` for invalid invocation syntax, and `66`
+when a required project or artifact cannot be found. Exit status `70` indicates
+that the installed verifier asset is unavailable. Build/run commands forward
+Flutter's exit status; doctor and verification failures return a non-zero status
+suitable for CI.
+
+Standard Flutter commands also work:
+
+```bash
+flutter run --dart-define=IRAN_IAP_STORE=bazaar
+flutter build appbundle --release --dart-define=IRAN_IAP_STORE=myket
+```
+
+Store selection is compile-time state. Stop and rebuild the app when switching
+stores; a hot restart cannot change it.
+
+## Initialize the client
+
+Cafe Bazaar defaults to backend verification and does not require a public key:
 
 ```dart
 final iap = IranIap();
 await iap.initialize();
 ```
 
-### 5. Run for one store
+Myket requires the store-provided RSA public key:
 
-Cafe Bazaar:
-
-```bash
-dart run iran_iap run --store bazaar
+```dart
+final iap = IranIap(
+  config: const IranIapConfig(storePublicKey: 'YOUR_PUBLIC_KEY'),
+);
+await iap.initialize();
 ```
 
-Myket:
+The public key is verification material, not a private server secret. Never put
+private keys, API secrets, or backend credentials in a Flutter application.
 
-```bash
-dart run iran_iap run \
-  --store myket \
-  --dart-define=IAP_PUBLIC_KEY=YOUR_MYKET_PUBLIC_KEY
+For optional Cafe Bazaar client-side signature checking:
+
+```dart
+final iap = IranIap(
+  config: const IranIapConfig(
+    storePublicKey: 'YOUR_BAZAAR_PUBLIC_KEY',
+    bazaarSecurityMode: BazaarSecurityMode.localVerification,
+  ),
+);
 ```
 
-The CLI does not edit your `pubspec.yaml`. It forwards the store to both Dart and Gradle for that build.
+Backend verification remains the authorization boundary for valuable
+entitlements.
 
-You can also use Flutter directly:
-
-```bash
-flutter run --dart-define=IRAN_IAP_STORE=bazaar
-```
-
-## Build commands
-
-Bazaar APK:
-
-```bash
-dart run iran_iap build apk --store bazaar --release
-```
-
-Myket APK:
-
-```bash
-dart run iran_iap build apk --store myket --release
-```
-
-Myket app bundle:
-
-```bash
-dart run iran_iap build appbundle --store myket --release
-```
-
-The package's Android Gradle logic adds only the selected native SDK and only the selected Kotlin source set.
-
-## Usage
-
-### Query products
+## Query products
 
 ```dart
 final products = await iap.queryProducts(
-  {'premium_monthly', 'coins_100'},
+  {'coin_pack', 'premium_monthly'},
   type: IapProductType.inApp,
 );
 
@@ -194,43 +208,37 @@ for (final product in products) {
 }
 ```
 
-### Purchase
+`IapProduct.price` is localized display text. Do not parse it for accounting or
+entitlement decisions.
+
+## Start a purchase
 
 ```dart
 final outcome = await iap.purchase(
   const IapPurchaseRequest(
-    productId: 'premium_monthly',
+    productId: 'coin_pack',
     type: IapProductType.inApp,
-    payload: 'user-123',
+    payload: 'order-correlation-id',
   ),
 );
 
 switch (outcome) {
-  case PurchaseCompleted(:final purchase):
-    // Send purchase evidence to your backend and verify it before granting
-    // valuable entitlements.
-    print('Purchase token: ${purchase.token}');
-
+  case PurchaseCompleted():
+    // Send purchase evidence to a trusted backend before granting access.
+    break;
   case PurchaseCancelled():
-    // Normal user action; no exception is thrown.
-    print('Purchase cancelled');
+    // Cancellation is expected user behavior, not an exception.
+    break;
 }
 ```
 
-### Subscriptions
+Cafe Bazaar dynamic pricing is available through
+`IapPurchaseRequest.dynamicPriceToken`. Myket rejects that option with
+`IapErrorCode.featureUnavailable`.
 
-```dart
-if (iap.capabilities.supportsSubscriptions) {
-  final outcome = await iap.purchase(
-    const IapPurchaseRequest(
-      productId: 'premium_monthly',
-      type: IapProductType.subscription,
-    ),
-  );
-}
-```
+## Restore and consume purchases
 
-### Owned purchases
+Query currently owned products or subscriptions:
 
 ```dart
 final purchases = await iap.queryPurchases(
@@ -238,50 +246,35 @@ final purchases = await iap.queryPurchases(
 );
 ```
 
-### Consume a verified consumable
+After the backend has verified and durably recorded a consumable purchase:
 
 ```dart
-// 1. Verify the purchase and persist the entitlement on your backend.
-// 2. Only then consume it when your business flow requires consumption.
 await iap.consume(purchase);
 ```
 
-### Cafe Bazaar dynamic price tokens
+Subscriptions cannot be consumed. A purchase returned by one store cannot be
+consumed by a client built for the other store.
 
-Dynamic pricing is provider-specific but remains inside the common purchase API:
+## Configuration and capabilities
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `storePublicKey` | `null` | Required by Myket and Bazaar local verification. |
+| `bazaarSecurityMode` | `serverVerification` | Enables or disables Poolakey's local RSA check. |
+| `enableSubscriptions` | `true` | Requests subscription support for Cafe Bazaar. |
+
+After initialization, inspect `iap.capabilities` before exposing optional UI:
 
 ```dart
-if (iap.capabilities.supportsDynamicPricing) {
-  final outcome = await iap.purchase(
-    const IapPurchaseRequest(
-      productId: 'coins_100',
-      type: IapProductType.inApp,
-      dynamicPriceToken: 'TOKEN_FROM_YOUR_TRUSTED_FLOW',
-    ),
-  );
+if (iap.capabilities.supportsSubscriptions) {
+  // Show subscription products.
 }
 ```
 
-Passing a dynamic-price token to a Myket build throws `IapErrorCode.featureUnavailable` before opening the native purchase flow.
+## Error handling
 
-## Available APIs
-
-The public surface is intentionally small:
-
-- `IranIap` — default client implementation.
-- `IranIapClient` — store-agnostic interface for DI/mocking in applications.
-- `IranIapConfig` — initialization configuration.
-- `queryProducts(...)` — fetch product metadata.
-- `purchase(...)` — purchase/subscription flow.
-- `queryPurchases(...)` — fetch currently owned purchases.
-- `consume(...)` — consume verified in-app purchases.
-- `dispose()` — release native billing resources.
-
-Types from Poolakey and Myket Billing Client are not exposed in the Dart API.
-
-## Handling errors
-
-Operational failures throw `IapException`:
+Operational failures throw `IapException`. Branch on its stable `code`, not on
+provider-specific messages:
 
 ```dart
 try {
@@ -289,119 +282,101 @@ try {
 } on IapException catch (error) {
   switch (error.code) {
     case IapErrorCode.storeNotInstalled:
-      // Ask the user to install the target store.
+      // Prompt the user to install the selected store.
       break;
-    case IapErrorCode.storeUnsupported:
     case IapErrorCode.serviceUnavailable:
-      // The installed store/billing service cannot currently serve the flow.
-      break;
-    case IapErrorCode.configuration:
-      // Fix app/package configuration.
+      // Offer a retry.
       break;
     default:
-      // Log diagnostics and show an appropriate retry/error UI.
+      // Record a redacted diagnostic and show a safe fallback.
       break;
   }
 }
 ```
 
-`nativeCode`, `nativeMessage`, and `nativeExceptionType` are preserved when available. Use them for diagnostics; keep business logic on the stable `IapErrorCode` values.
+`nativeCode`, `nativeMessage`, `nativeExceptionType`, and `details` are
+diagnostic fields. Do not use them as the business-logic contract, and do not
+log purchase tokens, receipts, signatures, or user secrets.
 
-User cancellation is **not** an exception. It returns `PurchaseCancelled`.
+Only one asynchronous billing operation may run at a time. Overlapping calls
+fail with `IapErrorCode.operationInProgress`.
 
-## Security
+## Lifecycle
 
-A client-side "purchase succeeded" callback is not a sufficient authorization boundary for valuable digital entitlements.
+Create one client for the lifetime of the owning service or feature. Repeated
+`initialize()` calls share the same connection. Dispose it when finished:
 
-Recommended flow:
-
-1. Receive purchase evidence from `iran_iap`.
-2. Send it to your backend over an authenticated connection.
-3. Verify the purchase against the store/vendor verification flow you trust.
-4. Persist an idempotent entitlement/transaction record server-side.
-5. Grant the entitlement.
-6. Consume consumables only after the server-side state is safely persisted.
-
-Never put private keys, backend API secrets, or privileged credentials in Dart code or `--dart-define` values shipped to users.
-
-## Example
-
-A runnable Android example is included in [`example/`](example/).
-
-From the repository root:
-
-```bash
-dart run iran_iap run --store bazaar
+```dart
+await iap.dispose();
 ```
 
-Or:
+A disposed client cannot be reused; create a new `IranIap` instance instead.
+
+## Verify artifact isolation
+
+After building an APK or AAB, scan it for the unselected billing SDK:
 
 ```bash
-dart run iran_iap run \
-  --store myket \
-  --dart-define=IAP_PUBLIC_KEY=YOUR_MYKET_PUBLIC_KEY
+dart run iran_iap verify --store bazaar build/app/outputs/flutter-apk/app-release.apk
+dart run iran_iap verify --store myket build/app/outputs/bundle/release/app-release.aab
 ```
 
-For real transactions, install the selected store on the device, sign in, configure matching product IDs in the store console, and use the application/package identity registered for testing.
+The verifier requires Python 3. It is a conservative release guard, not a
+formal proof; keep the store's real-device billing tests in the release process.
 
 ## Troubleshooting
 
-### `storeNotInstalled`
+### No store is selected
 
-The selected store app is not installed or cannot be discovered on the device. Billing tests are more reliable on a physical Android device with the target store installed and signed in.
+Build with `--store bazaar|myket` through the CLI or pass a matching
+`IRAN_IAP_STORE` Dart define. Rebuild instead of hot restarting.
 
-### Bazaar initialization cannot connect
+### Native SDK dependency cannot be resolved
 
-`storeNotInstalled` means Cafe Bazaar is not installed/discoverable. `storeUnsupported` means the installed Bazaar billing API is incompatible. Other connection failures preserve `nativeExceptionType`/`nativeMessage` for diagnostics and can surface as `serviceUnavailable`, `notInitialized`, or `platform` depending on the upstream failure.
+Confirm JitPack is present in the host Android repositories and is not blocked
+by a restrictive repository policy.
 
-### Poolakey or Myket dependency cannot be resolved
+### Bazaar reports `activityUnavailable`
 
-Make sure the host Android project has the one-time JitPack repository setup shown above.
-
-### `activityUnavailable` on Bazaar purchases
-
-Use `FlutterFragmentActivity` (or another Android Activity implementing `ActivityResultRegistryOwner`) as the Flutter host activity.
-
-### `No iran_iap store is selected`
-
-Use the CLI:
-
-```bash
-dart run iran_iap run --store bazaar
-```
-
-or pass a matching Flutter define:
-
-```bash
-flutter run --dart-define=IRAN_IAP_STORE=bazaar
-```
-
-A hot restart cannot change compile-time store selection; stop and rebuild the app.
+Use `FlutterFragmentActivity` (or another `ActivityResultRegistryOwner`) for the
+host activity.
 
 ### Myket initialization reports a configuration error
 
-Pass the Myket public RSA verification key to `IranIapConfig.storePublicKey`. Do not pass a private key or backend secret.
+Provide a non-empty `storePublicKey` and all three manifest placeholders shown
+above, then run `dart run iran_iap doctor --store myket`.
 
-## Limitations
+### The billing connection is lost
 
-- Android only.
-- Cafe Bazaar and Myket only in the current release.
-- Store SDK behavior can depend on the installed store app version, account state, product-console configuration, and test eligibility.
-- The package normalizes client billing operations; it does not replace backend receipt verification or entitlement storage.
-- JitPack and Myket manifest placeholders require one-time host Android configuration.
+`IapErrorCode.notInitialized` resets the client's ready state. Call
+`initialize()` again before retrying the operation.
 
-## Versioning
+## Example
 
-`iran_iap` follows Semantic Versioning. The package is intentionally below `1.0.0` while the public API receives real-world feedback from multiple production apps. Breaking public API changes during the `0.x` period will be documented clearly in `CHANGELOG.md` and migration notes.
+The [`example/`](example/) app demonstrates initialization, product lookup,
+purchase, owned-purchase queries, cancellation, errors, and consumption. Run it
+with a configured test product and store account:
+
+```bash
+dart run iran_iap run --project-dir example --store bazaar
+```
+
+Real billing tests require a physical Android device with the selected store
+installed and signed in.
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and quality checks.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and validation commands.
+Architecture and release details are in the
+[architecture guide](https://github.com/ariaramin/iran-iap/blob/main/docs/ARCHITECTURE.md)
+and
+[release checklist](https://github.com/ariaramin/iran-iap/blob/main/docs/RELEASE_CHECKLIST.md).
 
-For security-sensitive reports, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
+Security issues should be reported through GitHub's private security advisory
+flow as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-`iran_iap` is available under the MIT License. See [LICENSE](LICENSE).
-
-Native store SDKs remain separate upstream dependencies. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+`iran_iap` is available under the [MIT License](LICENSE). Native billing SDKs
+remain subject to their upstream terms; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

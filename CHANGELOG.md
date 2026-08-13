@@ -24,6 +24,16 @@ The project follows Semantic Versioning.
 - Added package metadata suitable for GitHub and pub.dev.
 - Hardened CLI project detection so a plugin root cannot be mistaken for a Flutter application even when a custom target is passed.
 - Tightened the pub archive ignore rules to exclude generated state, maintainer tooling, CI files, and release evidence.
+- Added the project banner and expanded the README with complete setup, API, lifecycle, error-handling, and troubleshooting guidance.
+- Corrected the Myket artifact scanner to detect Poolakey code without rejecting Bazaar service identifiers embedded by the Myket SDK itself.
+- Fixed reconnection after a native billing disconnect and normalized malformed native payloads to `IapErrorCode.invalidResponse`.
+- Rejected conflicting CLI store defines and enforced subscription capabilities for product queries.
+- Made Bazaar error mapping resilient to code shrinking and fail in-flight Bazaar operations safely across Activity recreation.
+- Included the runtime artifact verifier in the pub archive and disabled automatic tag publishing pending explicit release setup.
+- Made CLI parsing directly testable, declared `--verbose`, validated positional operands, and centralized asynchronous exit-status handling.
+- Fixed artifact verification from globally activated installs by resolving runtime assets through Dart's package configuration.
+- Added example configuration regression coverage and excluded the generated Android registrant from the pub archive.
+- Removed the pre-release publishing workflow; the first pub.dev release remains an explicit manual gate.
 
 ## 0.2.6
 

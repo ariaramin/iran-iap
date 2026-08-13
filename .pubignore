@@ -4,12 +4,17 @@
 **/.pub/
 **/build/
 **/coverage/
-doc/api/
+**/.flutter-plugins-dependencies
+**/GeneratedPluginRegistrant.java
+doc/
 **/pubspec.lock
 **/pubspec_overrides.yaml
 
 # Android local/generated state
 **/.gradle/
+**/.kotlin/
+**/.cxx/
+**/captures/
 **/local.properties
 **/key.properties
 **/*.jks
@@ -30,6 +35,8 @@ doc/api/
 
 # Maintainer-only repository automation and release evidence
 .github/
-tool/
+tool/__init__.py
+tool/check_isolation.py
+tool/test_*.py
 docs/
 VALIDATION_REPORT.md

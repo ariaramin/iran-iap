@@ -26,13 +26,20 @@ class ArtifactVerifierTest(unittest.TestCase):
         self.assertEqual(findings[0][1], "ir/myket/billingclient")
 
     def test_rejects_nested_path(self) -> None:
-        findings = verify("myket", self._artifact(b"com.farsitel.bazaar", filename="assets/bazaar.txt"))
+        findings = verify(
+            "myket",
+            self._artifact(b"ir.cafebazaar.poolakey.Payment", filename="assets/bazaar.txt"),
+        )
         self.assertTrue(findings)
         self.assertEqual(findings[0][0], "assets/bazaar.txt")
 
     def test_case_insensitivity(self) -> None:
-        findings = verify("myket", self._artifact(b"COM.FARSITEL.BAZAAR"))
+        findings = verify("myket", self._artifact(b"IR.CAFEBAZAAR.POOLAKEY"))
         self.assertTrue(findings)
+
+    def test_allows_bazaar_service_name_embedded_by_myket_sdk(self) -> None:
+        findings = verify("myket", self._artifact(b"com.farsitel.bazaar"))
+        self.assertEqual(findings, [])
 
     def test_error_on_missing_file(self) -> None:
         with self.assertRaises(FileNotFoundError):

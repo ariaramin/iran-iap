@@ -47,6 +47,10 @@ internal class SelectedStorePlugin : FlutterPlugin, MethodChannel.MethodCallHand
 
     override fun onDetachedFromActivityForConfigChanges() {
         activity = null
+        val currentPayment = payment
+        if (operationInProgress.get() && currentPayment != null) {
+            invalidatePayment(currentPayment, notifyActiveOperation = true)
+        }
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {

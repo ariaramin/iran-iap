@@ -39,6 +39,9 @@ class _ExampleAppState extends State<_ExampleApp> {
 
   Future<void> _initialize() async {
     await _run(() async {
+      if (_iap.store == IapStore.myket && _publicKey.trim().isEmpty) {
+        return 'IAP_PUBLIC_KEY is required for Myket.';
+      }
       await _iap.initialize();
       return 'Initialized ${_iap.store.name}. '
           'Subscriptions: ${_iap.capabilities.supportsSubscriptions}';
@@ -48,6 +51,9 @@ class _ExampleAppState extends State<_ExampleApp> {
   Future<void> _queryProduct() async {
     await _run(() async {
       final id = _productIdController.text.trim();
+      if (id.isEmpty) {
+        return 'Enter a product ID.';
+      }
       final products = await _iap.queryProducts({id}, type: _type);
       if (products.isEmpty) {
         return 'No product returned for `$id`.';
@@ -59,9 +65,13 @@ class _ExampleAppState extends State<_ExampleApp> {
 
   Future<void> _purchase() async {
     await _run(() async {
+      final productId = _productIdController.text.trim();
+      if (productId.isEmpty) {
+        return 'Enter a product ID.';
+      }
       final outcome = await _iap.purchase(
         IapPurchaseRequest(
-          productId: _productIdController.text.trim(),
+          productId: productId,
           type: _type,
           payload: 'iran_iap_example',
         ),
@@ -115,29 +125,24 @@ class _ExampleAppState extends State<_ExampleApp> {
     }
     setState(() => _busy = true);
     try {
-      final message = await action();
-      if (!mounted) {
-        return;
-      }
-      setState(() => _status = message);
+      _updateStatus(await action());
     } on IapException catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status =
-            '${error.code.name}: ${error.message}\n'
-            '${error.nativeExceptionType ?? ''}';
-      });
+      _updateStatus(
+        '${error.code.name}: ${error.message}\n'
+        '${error.nativeExceptionType ?? ''}',
+      );
     } on Exception catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _status = 'Error: $error');
+      _updateStatus('Error: $error');
     } finally {
       if (mounted) {
         setState(() => _busy = false);
       }
+    }
+  }
+
+  void _updateStatus(String status) {
+    if (mounted) {
+      setState(() => _status = status);
     }
   }
 
@@ -150,10 +155,6 @@ class _ExampleAppState extends State<_ExampleApp> {
 
   @override
   Widget build(BuildContext context) {
-    final storeLabel = _selectedStoreName.isEmpty
-        ? 'No store selected'
-        : _selectedStoreName;
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
@@ -164,7 +165,7 @@ class _ExampleAppState extends State<_ExampleApp> {
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                'Store: $storeLabel',
+                'Store: $_selectedStoreName',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),

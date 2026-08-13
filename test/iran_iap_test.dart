@@ -10,14 +10,18 @@ const _channel = MethodChannel('dev.iraniap/iran_iap');
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  if (!const {'bazaar', 'myket'}.contains(_storeName)) {
+    test(
+      'store-specific suite requires IRAN_IAP_STORE',
+      () {},
+      skip: 'Run with --dart-define=IRAN_IAP_STORE=bazaar|myket.',
+    );
+    return;
+  }
+
   late TestDefaultBinaryMessenger messenger;
 
   setUp(() {
-    expect(
-      {'bazaar', 'myket'},
-      contains(_storeName),
-      reason: 'Run tests with --dart-define=IRAN_IAP_STORE=bazaar|myket.',
-    );
     messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   });
@@ -96,9 +100,14 @@ void main() {
   });
 
   test('native disconnect invalidates local initialized state', () async {
+    var initializeCount = 0;
     _mockReady(
       messenger,
       onMethod: (call) async {
+        if (call.method == 'initialize') {
+          initializeCount++;
+          return _capabilities();
+        }
         if (call.method == 'queryPurchases') {
           throw PlatformException(
             code: 'notInitialized',
@@ -125,6 +134,9 @@ void main() {
     );
 
     expect(iap.isInitialized, isFalse);
+    await iap.initialize();
+    expect(initializeCount, 2);
+    expect(iap.isInitialized, isTrue);
   });
 
   test('purchase cancellation is a typed outcome', () async {
@@ -197,6 +209,64 @@ void main() {
     await expectLater(
       iap.queryProducts({' '}, type: IapProductType.inApp),
       throwsArgumentError,
+    );
+  });
+
+  test('unsupported subscription query fails before native query', () async {
+    var queryCount = 0;
+    messenger.setMockMethodCallHandler(_channel, (call) async {
+      if (call.method == 'selectedStore') {
+        return _storeName;
+      }
+      if (call.method == 'initialize') {
+        return _capabilities(subscriptions: false);
+      }
+      if (call.method == 'queryProducts') {
+        queryCount++;
+      }
+      return null;
+    });
+
+    final iap = _client();
+    await iap.initialize();
+
+    await expectLater(
+      iap.queryProducts({'premium'}, type: IapProductType.subscription),
+      throwsA(
+        isA<IapException>().having(
+          (error) => error.code,
+          'code',
+          IapErrorCode.subscriptionUnavailable,
+        ),
+      ),
+    );
+    expect(queryCount, 0);
+  });
+
+  test('malformed native product becomes invalidResponse', () async {
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'queryProducts') {
+          return <Object?>[
+            <String, Object?>{'id': 42},
+          ];
+        }
+        return null;
+      },
+    );
+    final iap = _client();
+    await iap.initialize();
+
+    await expectLater(
+      iap.queryProducts({'premium'}, type: IapProductType.inApp),
+      throwsA(
+        isA<IapException>().having(
+          (error) => error.code,
+          'code',
+          IapErrorCode.invalidResponse,
+        ),
+      ),
     );
   });
 
@@ -326,6 +396,10 @@ void main() {
 
     await expectLater(iap.initialize(), throwsArgumentError);
   });
+
+  test('legacy numeric refunded state is normalized', () {
+    expect(IapPurchaseState.fromWire(2), IapPurchaseState.refunded);
+  });
 }
 
 IranIap _client() {
@@ -345,13 +419,20 @@ void _mockReady(
     if (call.method == 'selectedStore') {
       return _storeName;
     }
-    if (call.method == 'initialize') {
-      return <String, Object?>{
-        'supportsSubscriptions': true,
-        'supportsConsumption': true,
-        'supportsDynamicPricing': _storeName == 'bazaar',
-      };
+    final customResponse = await onMethod?.call(call);
+    if (customResponse != null) {
+      return customResponse;
     }
-    return onMethod?.call(call);
+    if (call.method == 'initialize') {
+      return _capabilities();
+    }
+    return null;
   });
 }
+
+Map<String, Object?> _capabilities({bool subscriptions = true}) =>
+    <String, Object?>{
+      'supportsSubscriptions': subscriptions,
+      'supportsConsumption': true,
+      'supportsDynamicPricing': _storeName == 'bazaar',
+    };

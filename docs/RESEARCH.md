@@ -26,6 +26,7 @@ These notes record the upstream assumptions used by `iran_iap` 0.3.0 so future m
 - Distribution repository: JitPack.
 - Myket's helper permits one asynchronous billing operation at a time, so the common Dart/native layer serializes billing operations by rejecting overlaps.
 - The Billing Client AAR uses store manifest placeholders supplied by the host application.
+- Version 1.19 embeds Cafe Bazaar service package strings for its own compatibility logic. Artifact isolation therefore checks for Poolakey package/classes rather than treating those service-name strings as evidence that Poolakey was bundled.
 - In upstream 1.19, the three-argument inventory implementation passes `moreItemSkus` to the subscription SKU-details query instead of `moreSubsSkus`. `iran_iap` deliberately uses the public two-argument async inventory API and filters returned `SkuDetails` by type, avoiding reflection or a fork.
 - The upstream repository currently has no root `LICENSE` file visible on its default branch. Individual inherited Google IAB source files contain Apache-2.0 headers, but the maintainer must still confirm Myket's current vendor/distribution terms before first public publication.
 

@@ -45,6 +45,10 @@ jobs:
         
       - name: Test Dart API - Myket build contract
         run: flutter test --dart-define=IRAN_IAP_STORE=myket
+
+      - name: Test example configuration handling
+        working-directory: example
+        run: flutter test --dart-define=IRAN_IAP_STORE=myket
         
       - name: Check source isolation
         run: python3 tool/check_isolation.py

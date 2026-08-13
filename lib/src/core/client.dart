@@ -26,8 +26,9 @@ abstract interface class IranIapClient {
   /// Calling this method repeatedly after a successful initialization is safe.
   /// Concurrent initialization requests share the same in-flight operation.
   ///
-  /// Throws [IapException] for configuration, store availability, or platform
-  /// failures. A client that has been [dispose]d cannot be initialized again.
+  /// Throws [ArgumentError] for invalid configuration and [IapException] for
+  /// store availability or platform failures. A client that has been
+  /// [dispose]d cannot be initialized again.
   Future<void> initialize();
 
   /// Queries metadata for [productIds].
@@ -71,7 +72,7 @@ abstract interface class IranIapClient {
 /// The concrete native implementation is selected at build time with
 /// `IRAN_IAP_STORE=bazaar` or `IRAN_IAP_STORE=myket`. Prefer the bundled CLI:
 /// `dart run iran_iap run --store bazaar` and
-/// `dart run iran_iap build apk --store myket --release`.
+/// `dart run iran_iap build apk --store myket -- --release`.
 final class IranIap implements IranIapClient {
   /// Creates a billing client for the store selected in this build.
   ///
@@ -142,7 +143,9 @@ final class IranIap implements IranIapClient {
       'initialize',
       _delegate.platformConfigArguments(config),
     );
-    _capabilities = IapCapabilities.fromMap(_asStringMap(raw, 'capabilities'));
+    _capabilities = _decode(
+      () => IapCapabilities.fromMap(_asStringMap(raw, 'capabilities')),
+    );
     _state = _BillingState.initialized;
   }
 
@@ -154,15 +157,18 @@ final class IranIap implements IranIapClient {
     _ensureReady();
     if (productIds.isEmpty) return const [];
     _validateIds(productIds);
+    _ensureTypeSupported(type);
 
     return _guard(() async {
       final raw = await _invoke<List<Object?>>('queryProducts', {
         'productIds': productIds.toList(growable: false),
         'type': type.wireName,
       });
-      return (raw ?? const [])
-          .map((v) => IapProduct.fromMap(_asStringMap(v, 'product')))
-          .toList(growable: false);
+      return _decode(
+        () => (raw ?? const [])
+            .map((v) => IapProduct.fromMap(_asStringMap(v, 'product')))
+            .toList(growable: false),
+      );
     });
   }
 
@@ -180,20 +186,22 @@ final class IranIap implements IranIapClient {
         'payload': request.payload,
         'dynamicPriceToken': request.dynamicPriceToken,
       });
-      final map = _asStringMap(raw, 'purchase');
-      return switch (map['status']) {
-        'completed' => PurchaseCompleted(
-          IapPurchase.fromMap(
-            map: _asStringMap(map['purchase'], 'purchase'),
-            type: request.type,
-            store: store,
+      return _decode(() {
+        final map = _asStringMap(raw, 'purchase');
+        return switch (map['status']) {
+          'completed' => PurchaseCompleted(
+            IapPurchase.fromMap(
+              map: _asStringMap(map['purchase'], 'purchase'),
+              type: request.type,
+              store: store,
+            ),
           ),
-        ),
-        'cancelled' => const PurchaseCancelled(),
-        _ => throw _invalidResponse(
-          'Unknown purchase status: ${map['status']}',
-        ),
-      };
+          'cancelled' => const PurchaseCancelled(),
+          _ => throw _invalidResponse(
+            'Unknown purchase status: ${map['status']}',
+          ),
+        };
+      });
     });
   }
 
@@ -209,15 +217,17 @@ final class IranIap implements IranIapClient {
         'queryPurchases',
         {'type': type.wireName},
       );
-      return (raw ?? const [])
-          .map(
-            (v) => IapPurchase.fromMap(
-              map: _asStringMap(v, 'purchase'),
-              type: type,
-              store: store,
-            ),
-          )
-          .toList(growable: false);
+      return _decode(
+        () => (raw ?? const [])
+            .map(
+              (v) => IapPurchase.fromMap(
+                map: _asStringMap(v, 'purchase'),
+                type: type,
+                store: store,
+              ),
+            )
+            .toList(growable: false),
+      );
     });
   }
 
@@ -252,6 +262,7 @@ final class IranIap implements IranIapClient {
       final error = IapException.fromPlatform(exception: e, store: store);
       if (error.code == IapErrorCode.notInitialized) {
         _state = _BillingState.ready;
+        _initialization = null;
       }
       throw error;
     } on services.MissingPluginException catch (e) {
@@ -318,6 +329,16 @@ final class IranIap implements IranIapClient {
     store: store,
     message: message,
   );
+
+  T _decode<T>(T Function() decode) {
+    try {
+      return decode();
+    } on IapException {
+      rethrow;
+    } on Object catch (error) {
+      throw _invalidResponse('Malformed native response: $error');
+    }
+  }
 
   static void _validateIds(Set<String> ids) {
     if (ids.any((id) => id.trim().isEmpty)) {

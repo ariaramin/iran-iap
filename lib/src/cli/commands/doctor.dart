@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:iran_iap/src/cli/commands/base.dart';
 import 'package:iran_iap/src/cli/utils/doctor_engine.dart';
 
@@ -16,19 +14,19 @@ class DoctorCommand extends IranIapCommand {
 
   @override
   String get name => 'doctor';
+
   @override
   String get description =>
       'Check host Android configuration for the selected store';
 
   @override
-  Future<void> run() async {
-    validateStore();
+  Future<int> run() async {
+    final store = requireStore();
     final project = resolveProject(allowExplicitTarget: false);
     if (project == null) {
-      exitCode = 66;
-      return;
+      return 66;
     }
 
-    exitCode = doctor(project, store!, isJson: argResults!.flag('json'));
+    return doctor(project, store, isJson: argResults!.flag('json'));
   }
 }

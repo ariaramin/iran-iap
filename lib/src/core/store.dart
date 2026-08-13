@@ -65,7 +65,7 @@ enum IapPurchaseState {
   /// Parses a wire value into a [IapPurchaseState].
   static IapPurchaseState fromWire(Object? value) => switch (value) {
     'purchased' || 0 => IapPurchaseState.purchased,
-    'refunded' => IapPurchaseState.refunded,
+    'refunded' || 2 => IapPurchaseState.refunded,
     _ => IapPurchaseState.unknown,
   };
 }

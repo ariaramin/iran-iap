@@ -28,7 +28,7 @@ graph TD
 
 - **Dart API layer**: Stable interface in `lib/`. Hides all store-specific types.
 - **MethodChannel layer**: Standard Flutter platform channel communication.
-- **Android plugin entrypoint**: `IranIapPlugin.kt` in `android/src/main`. Dispatches to the active `IapProvider`.
+- **Android plugin entrypoint**: `IranIapPlugin.kt` in `android/src/main`. Dispatches to the selected `SelectedStorePlugin` implementation.
 - **Store-specific native adapters**: Located in `android/src/bazaar` and `android/src/myket`.
 - **Gradle source-set selection**: The `build.gradle` in the plugin uses `iranIapStore` property to add the correct `src` directory and implementation dependency.
 - **Stub behavior**: If no store is selected, a stub provider is injected which throws a clear "No store selected" error during `initialize()`.

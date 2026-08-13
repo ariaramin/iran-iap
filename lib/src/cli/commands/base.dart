@@ -9,7 +9,7 @@ import 'package:meta/meta.dart';
 const stores = {'bazaar', 'myket'};
 
 /// Base class for all `iran_iap` commands.
-abstract class IranIapCommand extends Command<void> {
+abstract class IranIapCommand extends Command<int> {
   /// The store ID provided via the `--store` option.
   String? get store => globalResults?.option('store');
 
@@ -40,12 +40,13 @@ abstract class IranIapCommand extends Command<void> {
     return dir;
   }
 
-  /// Validates that the `--store` option was provided and is valid.
-  void validateStore() {
-    final s = store;
-    if (s == null || !stores.contains(s)) {
+  /// Returns the validated `--store` option.
+  String requireStore() {
+    final value = store;
+    if (value == null || !stores.contains(value)) {
       usageException('Missing or invalid --store. Expected: bazaar | myket');
     }
+    return value;
   }
 
   /// Executes a `flutter` command with store isolation.
@@ -56,10 +57,15 @@ abstract class IranIapCommand extends Command<void> {
     List<String> flutterArgs,
   ) async {
     final define = '--dart-define=IRAN_IAP_STORE=$store';
-    final hasStoreDefine = flutterArgs.any(
+    final storeDefines = flutterArgs.where(
       (arg) => arg.startsWith('--dart-define=IRAN_IAP_STORE='),
     );
-    if (!hasStoreDefine) {
+    if (storeDefines.any((arg) => arg != define)) {
+      usageException(
+        'Conflicting IRAN_IAP_STORE define. --store $store requires $define.',
+      );
+    }
+    if (storeDefines.isEmpty) {
       flutterArgs.add(define);
     }
 

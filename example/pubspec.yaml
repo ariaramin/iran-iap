@@ -11,5 +11,10 @@ dependencies:
   iran_iap:
     path: ../
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  very_good_analysis: ^10.3.0
+
 flutter:
   uses-material-design: true

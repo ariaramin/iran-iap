@@ -4,6 +4,10 @@ All notable changes to this package are documented here.
 
 The project follows Semantic Versioning.
 
+## 0.3.1
+
+- Fixed the README banner URL so pub.dev renders the image.
+
 ## 0.3.0
 
 - Refactored the public Dart API for better clarity and production readiness.

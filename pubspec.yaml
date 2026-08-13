@@ -1,6 +1,6 @@
 name: iran_iap
 description: Build-time isolated in-app purchases for Cafe Bazaar and Myket stores. One stable Flutter dependency with zero-overhead native store SDK isolation.
-version: 0.3.0
+version: 0.3.1
 homepage: https://github.com/ariaramin/iran-iap
 repository: https://github.com/ariaramin/iran-iap
 issue_tracker: https://github.com/ariaramin/iran-iap/issues

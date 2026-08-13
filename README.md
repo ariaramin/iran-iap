@@ -1,4 +1,4 @@
-![iran_iap — Flutter in-app purchases for Cafe Bazaar and Myket](thumbnail.png)
+![iran_iap — Flutter in-app purchases for Cafe Bazaar and Myket](https://raw.githubusercontent.com/ariaramin/iran-iap/main/thumbnail.png)
 
 # iran_iap
 

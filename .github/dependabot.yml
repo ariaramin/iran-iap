@@ -4,6 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: "pub"
     directory: "/"
@@ -19,3 +23,7 @@ updates:
     directory: "/example/android"
     schedule:
       interval: "weekly"
+    groups:
+      android-build-tooling:
+        patterns:
+          - "*"

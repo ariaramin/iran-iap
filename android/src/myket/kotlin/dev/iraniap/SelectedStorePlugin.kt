@@ -19,6 +19,8 @@ internal class SelectedStorePlugin : FlutterPlugin, MethodChannel.MethodCallHand
     private lateinit var channel: MethodChannel
     private var applicationContext: Context? = null
     private var activity: Activity? = null
+    private var activityBinding: ActivityPluginBinding? = null
+    private var paymentCallbacks: PaymentCallbackBridge? = null
     private var helper: IabHelper? = null
     private var initialized = false
     private var activePublicKey: String? = null
@@ -30,28 +32,40 @@ internal class SelectedStorePlugin : FlutterPlugin, MethodChannel.MethodCallHand
         applicationContext = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel.setMethodCallHandler(this)
+        paymentCallbacks = PaymentCallbackBridge(binding.applicationContext, channel)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         cleanup()
+        activityBinding?.let { paymentCallbacks?.detach(it) }
+        activityBinding = null
+        paymentCallbacks = null
         channel.setMethodCallHandler(null)
         applicationContext = null
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
+        activityBinding = binding
+        paymentCallbacks?.attach(binding)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
         activity = null
+        activityBinding?.let { paymentCallbacks?.detach(it) }
+        activityBinding = null
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
+        activityBinding = binding
+        paymentCallbacks?.attach(binding)
     }
 
     override fun onDetachedFromActivity() {
         activity = null
+        activityBinding?.let { paymentCallbacks?.detach(it) }
+        activityBinding = null
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -65,6 +79,11 @@ internal class SelectedStorePlugin : FlutterPlugin, MethodChannel.MethodCallHand
             }
             "queryProducts" -> withOperation(result) { queryProducts(call, it) }
             "purchase" -> withOperation(result) { purchase(call, it) }
+            "openPaymentUrl" -> openPaymentUrl(activity, call, result)
+            "registerPaymentSession" -> registerPaymentSession(call, result)
+            "consumePendingPaymentCallback" -> result.success(paymentCallbacks?.consumePending())
+            "recoverPaymentSession" -> result.success(paymentCallbacks?.recovery())
+            "clearPaymentSession" -> clearPaymentSession(call, result)
             "queryPurchases" -> withOperation(result) { queryPurchases(call, it) }
             "consume" -> withOperation(result) { consume(call, it) }
             "dispose" -> {
@@ -80,6 +99,23 @@ internal class SelectedStorePlugin : FlutterPlugin, MethodChannel.MethodCallHand
             }
             else -> result.notImplemented()
         }
+    }
+
+    private fun registerPaymentSession(call: MethodCall, result: MethodChannel.Result) {
+        val arguments = call.arguments as? Map<*, *>
+        when (arguments?.let { paymentCallbacks?.register(it) }) {
+            PaymentSessionRegistration.accepted -> result.success(null)
+            PaymentSessionRegistration.active -> result.iapError(
+                "operationInProgress",
+                "Another payment session is active.",
+            )
+            else -> result.iapError("configuration", "Payment session is malformed.")
+        }
+    }
+
+    private fun clearPaymentSession(call: MethodCall, result: MethodChannel.Result) {
+        paymentCallbacks?.clear(call.argument<String>("sessionId"))
+        result.success(null)
     }
 
     private fun initialize(call: MethodCall, result: MethodChannel.Result) {

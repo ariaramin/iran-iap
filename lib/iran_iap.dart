@@ -9,3 +9,4 @@ export 'src/models/capabilities.dart';
 export 'src/models/product.dart';
 export 'src/models/purchase.dart';
 export 'src/models/purchase_outcome.dart';
+export 'src/models/url_payment.dart';

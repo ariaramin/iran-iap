@@ -162,6 +162,300 @@ void main() {
     expect(outcome, isA<PurchaseCancelled>());
   });
 
+  test(
+    'payment URL is forwarded without requiring billing initialization',
+    () async {
+      _mockReady(
+        messenger,
+        onMethod: (call) async {
+          if (call.method == 'openPaymentUrl') {
+            expect(call.arguments, <String, Object?>{
+              'paymentUrl':
+                  'https://payments.example.test/checkout?session=one',
+            });
+          }
+          return null;
+        },
+      );
+
+      final iap = _client();
+      await iap.openPaymentUrl(
+        const IapUrlPaymentRequest(
+          paymentUrl: ' https://payments.example.test/checkout?session=one ',
+        ),
+      );
+    },
+  );
+
+  test(
+    'payment URLs reject unsafe or malformed values before native calls',
+    () async {
+      var paymentCallCount = 0;
+      _mockReady(
+        messenger,
+        onMethod: (call) async {
+          if (call.method == 'openPaymentUrl') {
+            paymentCallCount++;
+          }
+          return null;
+        },
+      );
+      final iap = _client();
+      for (final paymentUrl in const [
+        '',
+        'not a URL',
+        'http://payments.example.test/checkout',
+        'javascript:alert(1)',
+        'https://user:password@payments.example.test/checkout',
+      ]) {
+        await expectLater(
+          iap.openPaymentUrl(IapUrlPaymentRequest(paymentUrl: paymentUrl)),
+          throwsA(isA<PaymentConfigurationException>()),
+        );
+      }
+
+      expect(paymentCallCount, 0);
+    },
+  );
+
+  test(
+    'payment URLs support gateway-specific paths, queries, and fragments',
+    () {
+      for (final request in const [
+        IapUrlPaymentRequest(
+          paymentUrl: 'https://payments.example.test/checkout?session=one',
+        ),
+        IapUrlPaymentRequest(
+          paymentUrl: 'https://merchant.example.test/pay/order/123#complete',
+        ),
+        IapUrlPaymentRequest(
+          paymentUrl: 'https://gateway.example.test:8443/pay?state=one%2Ftwo',
+        ),
+      ]) {
+        expect(request.validate, returnsNormally);
+      }
+    },
+  );
+
+  test('native payment URL failures use the stable error contract', () async {
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'openPaymentUrl') {
+          throw PlatformException(
+            code: 'activityUnavailable',
+            message: 'No browser is available',
+          );
+        }
+        return null;
+      },
+    );
+    final iap = _client();
+    await expectLater(
+      iap.openPaymentUrl(
+        const IapUrlPaymentRequest(
+          paymentUrl: 'https://payments.example.test/checkout?session=one',
+        ),
+      ),
+      throwsA(
+        isA<IapException>()
+            .having(
+              (error) => error.code,
+              'code',
+              IapErrorCode.activityUnavailable,
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              'No browser is available',
+            ),
+      ),
+    );
+  });
+
+  test(
+    'payment session forwards a validated URL and resolves its callback',
+    () async {
+      final calls = <String>[];
+      _mockReady(
+        messenger,
+        onMethod: (call) async {
+          calls.add(call.method);
+          if (call.method == 'registerPaymentSession') {
+            final arguments = call.arguments! as Map<Object?, Object?>;
+            expect(arguments['expiresAt'], isA<int>());
+          }
+          return null;
+        },
+      );
+      final iap = _client();
+      final pending = iap.startPayment(
+        const IapUrlPaymentRequest(
+          paymentUrl: 'https://payments.example.test/checkout?session=one',
+        ),
+        callbackConfig: _callbackConfig(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      await _sendCallback(
+        messenger,
+        'myapp://payments/complete?state=state-0123456789abcdef&status=success&transaction_id=tx-1',
+      );
+
+      final result = await pending;
+      expect(result.status, PaymentStatus.success);
+      expect(result.transactionId, 'tx-1');
+      expect(
+        calls,
+        containsAllInOrder(<String>[
+          'registerPaymentSession',
+          'consumePendingPaymentCallback',
+          'openPaymentUrl',
+          'clearPaymentSession',
+        ]),
+      );
+    },
+  );
+
+  test(
+    'payment session rejects concurrent starts and can be cancelled',
+    () async {
+      _mockReady(messenger);
+      final iap = _client();
+      final pending = iap.startPayment(
+        const IapUrlPaymentRequest(paymentUrl: 'https://payments.example.test'),
+        callbackConfig: _callbackConfig(),
+      );
+
+      await expectLater(
+        iap.startPayment(
+          const IapUrlPaymentRequest(
+            paymentUrl: 'https://payments.example.test',
+          ),
+          callbackConfig: _callbackConfig(),
+        ),
+        throwsA(isA<PaymentInProgressException>()),
+      );
+      await iap.cancelPayment();
+      expect((await pending).status, PaymentStatus.cancelled);
+    },
+  );
+
+  test('native active session becomes a typed payment conflict', () async {
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'registerPaymentSession') {
+          throw PlatformException(
+            code: 'operationInProgress',
+            message: 'Another payment session is active.',
+          );
+        }
+        return null;
+      },
+    );
+
+    await expectLater(
+      _client().startPayment(
+        const IapUrlPaymentRequest(paymentUrl: 'https://payments.example.test'),
+        callbackConfig: _callbackConfig(),
+      ),
+      throwsA(isA<PaymentInProgressException>()),
+    );
+  });
+
+  test('callback contract rejects invalid returns', () {
+    final config = _callbackConfig();
+    for (final url in <String>[
+      'myapp://payments/complete?state=wrong&status=success',
+      'myapp://payments/other?state=state-0123456789abcdef&status=success',
+      'myapp://payments/complete?state=state-0123456789abcdef&status=unknown',
+      'myapp://payments/complete?state=state-0123456789abcdef&status=success&status=failed',
+      'https://payments/complete?state=state-0123456789abcdef&status=success',
+    ]) {
+      expect(
+        () => config.parseCallback(Uri.parse(url)),
+        throwsA(isA<PaymentCallbackException>()),
+      );
+    }
+  });
+
+  test('callback contract supports configured callback values', () {
+    const config = PaymentCallbackConfig(
+      scheme: 'https',
+      host: 'merchant.example.test',
+      path: '/payment/complete',
+      expectedState: 'state-0123456789abcdef',
+      successValues: {'ok', 'paid'},
+      failureValues: {'declined'},
+      cancelValues: {'aborted'},
+    );
+    expect(
+      config
+          .parseCallback(
+            Uri.parse(
+              'https://merchant.example.test/payment/complete?state=state-0123456789abcdef&status=paid',
+            ),
+          )
+          .status,
+      PaymentStatus.success,
+    );
+    expect(
+      config
+          .parseCallback(
+            Uri.parse(
+              'https://merchant.example.test/payment/complete?state=state-0123456789abcdef&status=aborted',
+            ),
+          )
+          .status,
+      PaymentStatus.cancelled,
+    );
+  });
+
+  test('payment recovery returns a verified persisted callback', () async {
+    final config = _callbackConfig();
+    _mockReady(
+      messenger,
+      onMethod: (call) async {
+        if (call.method == 'recoverPaymentSession') {
+          return <String, Object?>{
+            'session': config.toMap(),
+            'expiresAt': DateTime.now()
+                .add(const Duration(minutes: 1))
+                .millisecondsSinceEpoch,
+            'callbackUrl':
+                'myapp://payments/complete?state=state-0123456789abcdef&status=failed',
+          };
+        }
+        return null;
+      },
+    );
+
+    final result = await _client().recoverPaymentResult();
+    expect(result!.status, PaymentStatus.failed);
+  });
+
+  test('payment URLs cannot be opened after disposal', () async {
+    _mockReady(messenger);
+    final iap = _client();
+    await iap.dispose();
+
+    await expectLater(
+      iap.openPaymentUrl(
+        const IapUrlPaymentRequest(
+          paymentUrl: 'https://payments.example.test/checkout?session=one',
+        ),
+      ),
+      throwsA(
+        isA<IapException>().having(
+          (error) => error.code,
+          'code',
+          IapErrorCode.disposed,
+        ),
+      ),
+    );
+  });
+
   test('native diagnostics survive stable error mapping', () async {
     messenger.setMockMethodCallHandler(_channel, (call) async {
       if (call.method == 'selectedStore') {
@@ -436,3 +730,21 @@ Map<String, Object?> _capabilities({bool subscriptions = true}) =>
       'supportsConsumption': true,
       'supportsDynamicPricing': _storeName == 'bazaar',
     };
+
+PaymentCallbackConfig _callbackConfig() => const PaymentCallbackConfig(
+  scheme: 'myapp',
+  host: 'payments',
+  path: '/complete',
+  expectedState: 'state-0123456789abcdef',
+);
+
+Future<void> _sendCallback(
+  TestDefaultBinaryMessenger messenger,
+  String url,
+) => messenger.handlePlatformMessage(
+  _channel.name,
+  _channel.codec.encodeMethodCall(
+    MethodCall('paymentCallback', <String, Object?>{'url': url}),
+  ),
+  null,
+);
